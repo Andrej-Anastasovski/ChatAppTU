@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Visuals\attachFile.png" />
+    <None Remove="Visuals\attachImage.png" />
+    <None Remove="Visuals\background.jpg" />
+    <None Remove="Visuals\chatRoomBackground.jpg" />
+    <None Remove="Visuals\emoji.png" />
+    <None Remove="Visuals\houseIcon.com.png" />
+    <None Remove="Visuals\houseIcon.png" />
+    <None Remove="Visuals\iconForEmoji.png" />
+    <None Remove="Visuals\logo.png" />
+    <None Remove="Visuals\pngProf.png" />
+    <None Remove="Visuals\pngwing.com.png" />
+    <None Remove="Visuals\sendMSGIcon.png" />
+    <None Remove="Visuals\settIcon.png" />
+    <None Remove="Visuals\settingsIcon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Visuals\attachFile.png" />
+    <Resource Include="Visuals\attachImage.png" />
+    <Resource Include="Visuals\background.jpg" />
+    <Resource Include="Visuals\chatRoomBackground.jpg" />
+    <Resource Include="Visuals\emoji.png" />
+    <Resource Include="Visuals\houseIcon.png" />
+    <Resource Include="Visuals\iconForEmoji.png" />
+    <Resource Include="Visuals\logo.png" />
+    <Resource Include="Visuals\pngProf.png" />
+    <Resource Include="Visuals\sendMSGIcon.png" />
+    <Resource Include="Visuals\settIcon.png" />
+  </ItemGroup>
+
+</Project>
