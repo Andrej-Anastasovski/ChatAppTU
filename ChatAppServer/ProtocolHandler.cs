@@ -1,13 +1,18 @@
-// To DO using System;
+using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
+using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
+using static ChatAppServer.Server;
 
 namespace ChatAppServer
 {
     public static class ProtocolHandler
     {
+
         public struct ActiveUser
         {
             public TcpClient client;
@@ -15,65 +20,84 @@ namespace ChatAppServer
             public string status;
         };
 
-        // Broadcast active users information to all clients
-        public static void BroadcastActiveUsers(Dictionary<string, ActiveUser> clients)
+        public static void BroadcastActiveUsers(Dictionary<string, ActiveUser> clients) // Function to send info to all clients ( used for activeUsers ) 
         {
             ActiveUser aUser;
             ActiveUser choosenUser;
 
-            foreach (string user in clients.Keys)
+            foreach (string user in clients.Keys) // For every active client/user
             {
+
+
                 Send(user, "resetThePannel!", clients);
 
                 choosenUser = clients[user];
 
-                foreach (string username in clients.Keys)
+                foreach (string username in clients.Keys) // All active clients/users
                 {
                     aUser = clients[username];
 
-                    if (username != user)
+
+                    if (username != user) // Except the one that is beeing transmitted to
                     {
+
+                        Console.WriteLine("StackPannel Send: {0} to user {1}", username, user);
                         string modifiedUsername = "!@#$" + username;
 
+                        //// Broad cast Users treba da prasta sliki 
                         Send(user, modifiedUsername, clients);
                         Send(user, aUser.status, clients);
                         SendLargeImage(aUser.profPic, choosenUser.client.GetStream());
+
+
+
                     }
                 }
+
             }
         }
 
-        // Send data to a specific user
+
+
         public static void Send(string username, string packet, Dictionary<string, ActiveUser> clients)
         {
-            ActiveUser aUser = clients[username];
-            TcpClient client = aUser.client;
+            ActiveUser aUser;
+            aUser = clients[username];
+
+            TcpClient client = aUser.client; // Client that is beeing transmited to!
             NetworkStream stream = client.GetStream();
-            byte[] bytes = Encoding.ASCII.GetBytes(packet);
-            byte[] lengthBytes = BitConverter.GetBytes(bytes.Length);
-            NetworkTCP.SendTCP(lengthBytes, 4, stream);
-            NetworkTCP.SendTCP(bytes, bytes.Length, stream);
+            byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet); // Client username that is beeing sent! 
+            int length = bytes.Length;
+            byte[] leghtbytes = BitConverter.GetBytes(length);
+            NetworkTCP.SendTCP(leghtbytes, 4, stream);
+            NetworkTCP.SendTCP(bytes, length, stream);
         }
 
-        // Receive data from a network stream
         public static string Recieve(NetworkStream stream)
         {
             byte[] lengthBytes = NetworkTCP.ReceiveTCP(4, stream);
             int length = BitConverter.ToInt32(lengthBytes);
             byte[] messageBytes = NetworkTCP.ReceiveTCP(length, stream);
-            return Encoding.ASCII.GetString(messageBytes);
+            string message = Encoding.ASCII.GetString(messageBytes);
+            return message;
         }
 
-        // Send large image to the client
         public static void SendLargeImage(string filePath, NetworkStream sslStream, int chunkSize = 4096)
         {
             try
             {
+                // Load the image into a byte array
                 byte[] imageData = File.ReadAllBytes(filePath);
+
+                // Send the size of the image data to the server
                 byte[] dataSizeBytes = BitConverter.GetBytes(imageData.Length);
                 NetworkTCP.SendTCP(dataSizeBytes, dataSizeBytes.Length, sslStream);
 
+                // Send the image data to the server in chunks
                 int bytesSent = 0;
+
+
+
                 while (bytesSent < imageData.Length)
                 {
                     int bytesToSend = Math.Min(chunkSize, imageData.Length - bytesSent);
@@ -87,19 +111,32 @@ namespace ChatAppServer
             }
         }
 
-        // Send image data as bytes from the server to the client
+
+
         public static void SendLargeImageFromBytes(string username, byte[] imageData, Dictionary<string, ActiveUser> clients, int chunkSize = 4096)
         {
-            ActiveUser aUser = clients[username];
-            TcpClient client = aUser.client;
+
+            ActiveUser aUser;
+            aUser = clients[username];
+
+
+            TcpClient client = aUser.client; // Client that is beeing transmited to!
             NetworkStream sslStream = client.GetStream();
+
+
 
             try
             {
+
+                // Send the size of the image data to the server
                 byte[] dataSizeBytes = BitConverter.GetBytes(imageData.Length);
                 NetworkTCP.SendTCP(dataSizeBytes, dataSizeBytes.Length, sslStream);
 
+                // Send the image data to the server in chunks
                 int bytesSent = 0;
+
+
+
                 while (bytesSent < imageData.Length)
                 {
                     int bytesToSend = Math.Min(chunkSize, imageData.Length - bytesSent);
@@ -113,13 +150,16 @@ namespace ChatAppServer
             }
         }
 
-        // Receive large image from the client
+
         public static byte[] ReceiveLargeImage(NetworkStream sslStream, int chunkSize = 4096)
         {
+
+            // Receive the size of the image data from the server
             byte[] dataSizeBytes = new byte[sizeof(int)];
             int bytesRead = NetworkTCP.ReceiveImageTCP(dataSizeBytes, 0, dataSizeBytes.Length, sslStream);
             int imageDataSize = BitConverter.ToInt32(dataSizeBytes, 0);
 
+            // Receive the image data from the server in chunks
             byte[] imageData = new byte[imageDataSize];
             int bytesReceived = 0;
             while (bytesReceived < imageDataSize)
@@ -128,17 +168,28 @@ namespace ChatAppServer
                 bytesReceived += NetworkTCP.ReceiveImageTCP(imageData, bytesReceived, bytesToReceive, sslStream);
             }
 
+            // Save the image to the specified file path
             return imageData;
+
+
         }
 
-        // Get image byte array from the client
         public static byte[] getImgByteArr(NetworkStream sslStream)
         {
+            // Read the size of the image data from the client
             byte[] dataSizeBytes = NetworkTCP.ReceiveTCP(4, sslStream);
             int dataSize = BitConverter.ToInt32(dataSizeBytes, 0);
 
-            return NetworkTCP.ReceiveTCP(dataSize, sslStream);
+            // Read the image data from the client
+            byte[] imageData = NetworkTCP.ReceiveTCP(dataSize, sslStream);
+
+            return imageData;
+
         }
+
+
+
+
+
     }
 }
- 
