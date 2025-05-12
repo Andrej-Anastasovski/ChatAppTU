@@ -21,6 +21,4 @@ namespace ChatAppServer
             this.status = status;
         }
     }
-
 }
- 

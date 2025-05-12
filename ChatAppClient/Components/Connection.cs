@@ -1,11 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -14,176 +16,259 @@ namespace ChatAppClient.Components
     public class Connection
     {
         private TcpClient client;
-        private Thread receiver;
+        Int32 port = 10069;
+        IPAddress serverAddress = IPAddress.Parse("127.0.0.1");
+
         private MainWindow mainWindow;
+
+        private Thread reciever;
+
+
         public Dictionary<string, StackPanel> activeUserMsgPanel = new Dictionary<string, StackPanel>();
+
 
         public Connection()
         {
             client = new TcpClient();
-            client.Connect("127.0.0.1", 10069); // Connect to the server
-            receiver = new Thread(Start);
-            receiver.IsBackground = true;
-            receiver.Start();
+            client.Connect(serverAddress, port);
+            NetworkStream stream = client.GetStream();
+            reciever = new Thread(Start);
+            reciever.IsBackground = true;
+            reciever.Start();
         }
+
+        // State machines 
+        // Draw Rectangular Boxes 
+        // Separotor 
+
 
         public void Start()
         {
+
             NetworkStream stream = client.GetStream();
 
             while (true)
             {
+                //--------------------------------------------------------------------Recieve!
                 byte[] sizeBytes = NetworkTCP.ReceiveTCP(4, stream);
                 int messageSize = BitConverter.ToInt32(sizeBytes);
                 byte[] messageBytes = NetworkTCP.ReceiveTCP(messageSize, stream);
                 string response = Encoding.ASCII.GetString(messageBytes);
+                //--------------------------------------------------------------------
 
-                if (response.Substring(0, 4) == "!@#$") // Handle username, status, and image
+
+                Debug.WriteLine(response);
+
+                if (response.Substring(0, 4) == "!@#$")
                 {
-                    ProcessUserInfo(response, stream);
+                    response = response.Remove(0, 4);
+                    string username = response;
+                    string status = ProtocolHandler.Recieve(stream);
+                    byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
+                    ImageSource? bitmapImage = BinaryToImageSource(imgData);
+
+
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+                        bool showNotification = mainWindow.currentNotifications.TryGetValue(username, out bool isNotificationEnabled) && isNotificationEnabled;
+                        ActiveUser newActiveUser = new ActiveUser(username, status, bitmapImage, this, showNotification);
+                        mainWindow.stackPanel.Children.Add(newActiveUser);
+                    });
+
+
+
                 }
-                else if (response == "resetThePannel!") // Clear the user panel
+                else if (response == "resetThePannel!")
                 {
-                    ResetPanel();
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+                        mainWindow.stackPanel.Children.Clear();
+                    });
                 }
-                else if (response == "profPicset") // Handle profile picture update
+                else if (response == "profPicset")
                 {
-                    UpdateProfilePicture(stream);
+                    Debug.WriteLine("About to recieve an image");
+                    byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
+                    // byte[] imgData = recieveImgByteArr(stream);
+                    ImageSource? bitmapImage = BinaryToImageSource(imgData);
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+
+                        mainWindow.urProfPic.ImageSource = bitmapImage;
+                        mainWindow.profGridprofPic.Source = bitmapImage;
+
+                    });
                 }
-                else if (response == "recieveMsg") // Handle incoming message
+                else if (response == "recieveMsg")
                 {
-                    ReceiveMessage(stream);
+                    string fromuser = ProtocolHandler.Recieve(stream);
+                    string recievedMessage = ProtocolHandler.Recieve(stream);
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+
+                        if (!activeUserMsgPanel.ContainsKey(fromuser))
+                        {
+                            activeUserMsgPanel[fromuser] = new StackPanel();
+                        }
+                        activeUserMsgPanel[fromuser].Children.Add(new Message(recievedMessage, "left"));
+
+                        /////////////////////////////////////////////// NOTIFICATION HEEEEREEE!!!!
+                        ///
+
+                        // Find the ActiveUser control that corresponds to the sender
+                        var activeUserControl = mainWindow.stackPanel.Children
+                            .OfType<ActiveUser>()
+                            .FirstOrDefault(c => c.aUserName == fromuser);
+
+                        if (activeUserControl != null)
+                        {
+                            // Show the notification on the ActiveUser control
+                            activeUserControl.ShowNotification();
+                        }
+
+                        mainWindow.currentNotifications[fromuser] = true;
+
+                    });
+
+
                 }
-                else if (response == "recieveAUUUBAUUU") // Handle incoming image
+                else if (response == "recieveAUUUBAUUU")
                 {
-                    ReceiveImage(stream);
+
+                    string fromuser = ProtocolHandler.Recieve(stream);
+
+
+                    byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
+
+
+                    BitmapImage bitmapImage = CreateBitmapFromBytes(imgData);
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+
+                        if (!activeUserMsgPanel.ContainsKey(fromuser))
+                        {
+                            activeUserMsgPanel[fromuser] = new StackPanel();
+                        }
+
+                        try
+                        {
+                            activeUserMsgPanel[fromuser].Children.Add(new ImageMessage(bitmapImage, "left"));
+                        }
+                        catch
+                        {
+                            activeUserMsgPanel[fromuser].Children.Add(new Message("ERROR Image could not be dispalyed!", "left"));
+                        }
+
+                        var activeUserControl = mainWindow.stackPanel.Children
+                            .OfType<ActiveUser>()
+                           .FirstOrDefault(c => c.aUserName == fromuser);
+
+                        if (activeUserControl != null)
+                        {
+                            // Show the notification on the ActiveUser control
+                            activeUserControl.ShowNotification();
+                        }
+                        mainWindow.currentNotifications[fromuser] = true;
+
+                    });
+
+
                 }
-                else if (response == "newEmoji") // Handle incoming emoji
+                else if (response == "newEmoji")
                 {
-                    ReceiveEmoji(stream);
+                    string fromuser = ProtocolHandler.Recieve(stream);
+
+                    BitmapImage hehe = new BitmapImage(new Uri(@"\Visuals\emoji.png", UriKind.Relative));
+
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+
+                        if (!activeUserMsgPanel.ContainsKey(fromuser))
+                        {
+                            activeUserMsgPanel[fromuser] = new StackPanel();
+                        }
+
+                        try
+                        {
+                            activeUserMsgPanel[fromuser].Children.Add(new ImageMessage(hehe, "left"));
+                        }
+                        catch
+                        {
+                            activeUserMsgPanel[fromuser].Children.Add(new Message("ERROR Image could not be dispalyed!", "left"));
+                        }
+
+                        var activeUserControl = mainWindow.stackPanel.Children
+                           .OfType<ActiveUser>()
+                           .FirstOrDefault(c => c.aUserName == fromuser);
+
+                        if (activeUserControl != null)
+                        {
+                            // Show the notification on the ActiveUser control
+                            activeUserControl.ShowNotification();
+                        }
+
+                        mainWindow.currentNotifications[fromuser] = true;
+
+                    });
+
+
                 }
-                else if (response == "FailedToSignIn") // Handle failed sign-in
+                else if (response == "FailedToSignIn")
                 {
-                    HandleFailedSignIn();
+
+
+                    mainWindow.Dispatcher.Invoke(() =>
+                    {
+
+                        mainWindow.startGrid.Visibility = System.Windows.Visibility.Visible;
+                        mainWindow.mainGrid.Visibility = System.Windows.Visibility.Collapsed;
+                        mainWindow.badLogIn.Visibility = System.Windows.Visibility.Visible;
+
+                        mainWindow.inputBox.Text = string.Empty;
+                        mainWindow.inputPassBox.Password = string.Empty;
+
+
+                    });
+
+
+                }
+                else
+                {
+
+
+
                 }
             }
         }
 
-        private void ProcessUserInfo(string response, NetworkStream stream)
-        {
-            response = response.Remove(0, 4); // Remove header
-            string username = response;
-            string status = ProtocolHandler.Recieve(stream);
-            byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
-            ImageSource? bitmapImage = BinaryToImageSource(imgData);
 
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                ActiveUser newActiveUser = new ActiveUser(username, status, bitmapImage, this, true);
-                mainWindow.stackPanel.Children.Add(newActiveUser);
-            });
+        public void setWindowInstance(MainWindow mainWindow)
+        {
+            this.mainWindow = mainWindow;
         }
 
-        private void ResetPanel()
-        {
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                mainWindow.stackPanel.Children.Clear();
-            });
-        }
-
-        private void UpdateProfilePicture(NetworkStream stream)
-        {
-            byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
-            ImageSource? bitmapImage = BinaryToImageSource(imgData);
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                mainWindow.urProfPic.ImageSource = bitmapImage;
-                mainWindow.profGridprofPic.Source = bitmapImage;
-            });
-        }
-
-        private void ReceiveMessage(NetworkStream stream)
-        {
-            string fromUser = ProtocolHandler.Recieve(stream);
-            string receivedMessage = ProtocolHandler.Recieve(stream);
-
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                if (!activeUserMsgPanel.ContainsKey(fromUser))
-                {
-                    activeUserMsgPanel[fromUser] = new StackPanel();
-                }
-                activeUserMsgPanel[fromUser].Children.Add(new Message(receivedMessage, "left"));
-                ShowNotification(fromUser);
-            });
-        }
-
-        private void ReceiveImage(NetworkStream stream)
-        {
-            string fromUser = ProtocolHandler.Recieve(stream);
-            byte[] imgData = ProtocolHandler.ReceiveLargeImage(stream);
-            BitmapImage bitmapImage = CreateBitmapFromBytes(imgData);
-
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                if (!activeUserMsgPanel.ContainsKey(fromUser))
-                {
-                    activeUserMsgPanel[fromUser] = new StackPanel();
-                }
-                activeUserMsgPanel[fromUser].Children.Add(new ImageMessage(bitmapImage, "left"));
-                ShowNotification(fromUser);
-            });
-        }
-
-        private void ReceiveEmoji(NetworkStream stream)
-        {
-            string fromUser = ProtocolHandler.Recieve(stream);
-            BitmapImage emojiImage = new BitmapImage(new Uri(@"\Visuals\emoji.png", UriKind.Relative));
-
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                if (!activeUserMsgPanel.ContainsKey(fromUser))
-                {
-                    activeUserMsgPanel[fromUser] = new StackPanel();
-                }
-                activeUserMsgPanel[fromUser].Children.Add(new ImageMessage(emojiImage, "left"));
-                ShowNotification(fromUser);
-            });
-        }
-
-        private void HandleFailedSignIn()
-        {
-            mainWindow.Dispatcher.Invoke(() =>
-            {
-                mainWindow.startGrid.Visibility = System.Windows.Visibility.Visible;
-                mainWindow.mainGrid.Visibility = System.Windows.Visibility.Collapsed;
-                mainWindow.badLogIn.Visibility = System.Windows.Visibility.Visible;
-            });
-        }
-
-        private void ShowNotification(string fromUser)
-        {
-            var activeUserControl = mainWindow.stackPanel.Children
-                .OfType<ActiveUser>()
-                .FirstOrDefault(c => c.aUserName == fromUser);
-
-            if (activeUserControl != null)
-            {
-                activeUserControl.ShowNotification();
-            }
-
-            mainWindow.currentNotifications[fromUser] = true;
-        }
 
         private ImageSource? BinaryToImageSource(byte[] imageBinary)
         {
             return (ImageSource?)new ImageSourceConverter().ConvertFrom(imageBinary);
         }
 
+        public TcpClient getConnectionClient()
+        {
+
+            return this.client;
+
+        }
+
         public BitmapImage CreateBitmapFromBytes(byte[] imgData)
         {
             BitmapImage bitmap = new BitmapImage();
+
             using (MemoryStream stream = new MemoryStream(imgData))
             {
                 bitmap.BeginInit();
@@ -191,9 +276,10 @@ namespace ChatAppClient.Components
                 bitmap.StreamSource = stream;
                 bitmap.EndInit();
             }
+
             bitmap.Freeze();
+
             return bitmap;
         }
     }
 }
-

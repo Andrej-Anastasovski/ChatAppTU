@@ -60,12 +60,6 @@ namespace ChatAppClient.Components
             {
                 throw new InvalidOperationException("Message can be only on the left or on the right side!");
             }
-
-
-
-
-
         }
     }
 }
-

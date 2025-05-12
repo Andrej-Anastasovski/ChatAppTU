@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -86,9 +86,5 @@ namespace ChatAppClient.Components
             string message = Encoding.ASCII.GetString(messageBytes);
             return message;
         }
-
-
-
     }
 }
-

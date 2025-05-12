@@ -219,6 +219,3 @@ namespace ChatAppClient
 
     }
 }
-
-
- 

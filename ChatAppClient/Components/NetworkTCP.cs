@@ -65,7 +65,5 @@ namespace ChatAppClient.Components
             }
             return bytesReceived;
         }
-
     }
 }
-
